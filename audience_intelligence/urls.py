@@ -1,0 +1,7 @@
+from django.contrib import admin
+from django.urls import path
+from rest_framework_simplejwt.views import TokenObtainPairView,TokenRefreshView
+from predictor import views
+urlpatterns=[
+ path('admin/',admin.site.urls),path('',views.home_redirect,name='home'),path('dashboard/',views.dashboard,name='dashboard'),path('login/',views.login_view,name='login'),path('register/',views.register,name='register'),path('logout/',views.logout_view,name='logout'),path('users/',views.users,name='users'),path('user/<str:user_id>/',views.user_detail,name='user_detail'),path('predict/',views.predict,name='predict'),path('model/',views.model_page,name='model'),path('train/',views.train,name='train'),path('test-model/',views.test_page,name='test_model'),path('datasets/',views.datasets,name='datasets'),path('dataset/<int:dataset_id>/download/',views.dataset_download,name='dataset_download'),path('train-template/',views.train_template,name='train_template'),path('test-template/',views.test_template,name='test_template'),path('quick-train/',views.quick_train,name='quick_train'),path('feedback/',views.feedback,name='feedback'),path('chat/',views.chatbot,name='chatbot'),
+ path('api/auth/register/',views.api_register,name='api_register'),path('api/auth/token/',TokenObtainPairView.as_view(),name='token_obtain_pair'),path('api/auth/token/refresh/',TokenRefreshView.as_view(),name='token_refresh'),path('api/me/',views.api_me,name='api_me'),path('api/predict/',views.api_predict,name='api_predict')]

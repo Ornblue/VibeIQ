@@ -1,0 +1,71 @@
+{% extends 'predictor/base.html' %}{% block content %}
+<div class="pagehead"><div><div class="eyebrow">DECISION COCKPIT</div><h1>Predict a user's future</h1><p>Analyze one audience profile manually or upload a file. VibeIQ extracts the behavioral signals, scores churn, predicts LTV and next action, and explains the decision.</p></div></div>
+
+<div class="grid two">
+  <form class="card formgrid" method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    <h2>📄 Upload a user profile</h2>
+    <p class="muted">Recommended: a CSV/XLSX/JSON file with one user row and the 32 model fields. TXT, PDF and DOCX are also supported when they contain <code>feature: value</code> lines.</p>
+    <label>{{file_form.profile_file.label}}{{file_form.profile_file}}{% if file_form.profile_file.errors %}<small class="error">{{file_form.profile_file.errors|striptags}}</small>{% endif %}</label>
+    <button class="button" type="submit">Extract & analyze file</button>
+    <div class="demo-box"><b>Example document format</b><pre>user_id: U2048
+sessions_7d: 5
+session_change_7d: -0.32
+listening_minutes_7d: 210
+skip_rate: 0.41
+save_rate: 0.09
+... remaining model features ...</pre></div>
+  </form>
+
+  <form class="card formgrid" method="post">
+    {% csrf_token %}
+    <h2>⌨️ Manual input</h2>
+    <p class="muted">Use this when you do not have a profile file.</p>
+    {% for f in form %}<label>{{f.label}} {{f}}{% if f.errors %}<small class="error">{{f.errors|striptags}}</small>{% endif %}</label>{% endfor %}
+    <button class="button" type="submit">Analyze manually</button>
+  </form>
+</div>
+
+{% if extract_message %}<div class="flash">✓ {{extract_message}}</div>{% endif %}
+{% if extracted %}
+<div class="card"><h2>Extracted profile</h2><p class="muted">These values were extracted from the uploaded file before prediction.</p><div class="grid four">{% for k,v in extracted.items %}<div><small>{{k}}</small><br><b>{{v}}</b></div>{% endfor %}</div></div>
+{% endif %}
+
+{% if out %}
+<div class="grid four">
+  <div class="card kpi"><small>Churn probability</small><b>{{out.churn_probability|floatformat:1}}%</b><span>{{out.risk}} risk</span></div>
+  <div class="card kpi"><small>Engagement health</small><b>{{out.health|floatformat:1}}</b><span>out of 100</span></div>
+  <div class="card kpi"><small>Predicted LTV</small><b>₹{{out.ltv|floatformat:0}}</b><span>model estimate</span></div>
+  <div class="card kpi"><small>Next action</small><b>{{out.next_action}}</b><span>{{out.segment}}</span></div>
+</div>
+
+<div class="grid two">
+  <div class="card"><h2>1. Signed churn drivers</h2><p class="muted">Counterfactual percentage-point impact. Positive values push churn higher; negative values protect against churn.</p><div class="chartbox"><canvas id="impact"></canvas></div></div>
+  <div class="card"><h2>2. Behavioral peer profile</h2><p class="muted">Percentile strength versus the current audience. This is why the radar is meaningful even when features use different units.</p><div class="chartbox"><canvas id="profile"></canvas></div></div>
+</div>
+
+<div class="grid two">
+  <div class="card"><h2>3. Counterfactual sensitivity</h2><p class="muted">For each major driver, compare the user's current predicted churn with the prediction after replacing only that feature with the audience median.</p><div class="chartbox"><canvas id="sensitivity"></canvas></div></div>
+  <div class="card"><h2>4. Risk-driver balance</h2><p class="muted">Magnitude of positive versus protective model impacts among the displayed top signals.</p><div class="chartbox"><canvas id="balance"></canvas></div></div>
+</div>
+
+<div class="grid two">
+  <div class="card"><h2>5. Top risk contributors</h2><div class="chartbox"><canvas id="positive"></canvas></div></div>
+  <div class="card"><h2>6. Protective signals</h2><div class="chartbox"><canvas id="negative"></canvas></div></div>
+</div>
+
+<div class="card"><h2>Business interpretation</h2><div class="grid three"><div><small>Segment</small><h3>{{out.segment}}</h3></div><div><small>Predicted next action</small><h3>{{out.next_action}}</h3></div><div><small>Recommended action</small><p>{{out.recommendation}}</p></div></div></div>
+
+<script>
+const I={{impacts|safe}}, P={{profile|safe}}, S={{sensitivity|safe}};
+const byId=id=>document.getElementById(id);
+const base={responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}}};
+new Chart(byId('impact'),{type:'bar',data:{labels:I.map(x=>x.feature),datasets:[{label:'Impact (pp)',data:I.map(x=>x.impact)}]},options:{...base,indexAxis:'y',scales:{x:{title:{display:true,text:'Change in churn probability (percentage points)'}}},plugins:{legend:{display:false}}}});
+new Chart(byId('profile'),{type:'radar',data:{labels:P.map(x=>x.feature),datasets:[{label:'Audience percentile',data:P.map(x=>x.strength)}]},options:{...base,scales:{r:{min:0,max:1,ticks:{stepSize:.2}}}}});
+new Chart(byId('sensitivity'),{type:'bar',data:{labels:S.map(x=>x.feature),datasets:[{label:'Current churn %',data:S.map(x=>x.current)},{label:'Median-feature churn %',data:S.map(x=>x.counterfactual)}]},options:{...base,indexAxis:'y',scales:{x:{min:0,max:100,title:{display:true,text:'Predicted churn (%)'}}}}});
+const pos=I.filter(x=>x.impact>0), neg=I.filter(x=>x.impact<0);
+new Chart(byId('balance'),{type:'doughnut',data:{labels:['Risk-increasing impact','Protective impact'],datasets:[{data:[pos.reduce((a,x)=>a+x.impact,0),Math.abs(neg.reduce((a,x)=>a+x.impact,0))]}]},options:base});
+new Chart(byId('positive'),{type:'bar',data:{labels:pos.map(x=>x.feature).slice(0,7),datasets:[{label:'Risk contribution (pp)',data:pos.map(x=>x.impact).slice(0,7)}]},options:{...base,indexAxis:'y',plugins:{legend:{display:false}}}});
+new Chart(byId('negative'),{type:'bar',data:{labels:neg.map(x=>x.feature).slice(0,7),datasets:[{label:'Protective contribution (pp)',data:neg.map(x=>Math.abs(x.impact)).slice(0,7)}]},options:{...base,indexAxis:'y',plugins:{legend:{display:false}}}});
+</script>
+{% endif %}{% endblock %}
